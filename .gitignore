@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Local database, refresh logs, and generated offline snapshot
+sanctions.db
+sanctions.db-*
+logs/
+OCHA_Sanctions_Search_Offline.html

@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title data-i18n="documentTitle">OCHA sanctions search prototype</title>
+  <link rel="stylesheet" href="/static/style.css?v=20261116-11">
+</head>
+<body>
+  <header class="topbar">
+    <div class="container nav-shell">
+      <div class="brand-wrap">
+        <div class="brand-badge">UN OCHA</div>
+        <div class="brand-copy">
+          <span data-i18n="unitedNations">United Nations</span>
+          <h1 data-i18n="pageHeading">Sanctions &amp; Ineligibility Search</h1>
+        </div>
+      </div>
+      <div class="header-tools">
+        <div class="status-pill live" data-i18n="liveData">Live data feeds</div>
+        <nav class="language-switch" role="group" data-i18n-aria-label="languageSelector" aria-label="Select language">
+          <button type="button" data-language="en" aria-pressed="true">EN</button>
+          <button type="button" data-language="fr" aria-pressed="false">FR</button>
+          <button type="button" data-language="es" aria-pressed="false">ES</button>
+        </nav>
+      </div>
+    </div>
+    <div class="container hero-shell">
+      <div class="hero-copy">
+        <p class="eyebrow" data-i18n="operationalTool">Operational screening tool</p>
+        <h2 data-i18n="heroHeading">Fast, transparent checks across official sanctions records.</h2>
+        <p class="subtitle" data-i18n="heroDescription">Search names, aliases and source records across multiple public and authoritative datasets to support due-diligence review.</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-box">
+          <strong>{{ stats['sources'] }}</strong>
+          <span data-i18n="sourcesWithRecords">sources with records</span>
+        </div>
+        <div class="stat-box">
+          <strong>{{ "{:,}".format(stats['records']) }}</strong>
+          <span data-i18n="recordsIndexed">records indexed</span>
+        </div>
+        <div class="stat-box">
+          <strong>1</strong>
+          <span data-i18n="workflows">screening workflow</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container main-shell">
+    <section id="search-panel" class="card panel-primary">
+      <div class="panel-header">
+        <div>
+          <p class="section-kicker" data-i18n="search">Search</p>
+          <h2 data-i18n="searchHeading">Search consolidated records</h2>
+        </div>
+      </div>
+      <form id="f" class="search-form">
+        <label><span data-i18n="name">Name</span>
+          <input id="n" minlength="2" autocomplete="off" placeholder="Name or alias" data-i18n-placeholder="namePlaceholder">
+        </label>
+        <label><span data-i18n="country">Country</span>
+          <div class="country-control">
+            <input id="c" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="country-options" aria-describedby="country-hint" autocomplete="off" placeholder="Type a country" data-i18n-placeholder="countryPlaceholder">
+            <div id="country-options" class="country-suggestions" role="listbox" aria-label="Country suggestions" data-i18n-aria-label="countrySuggestions" hidden>
+            {% for country in countries %}
+              <button type="button" class="country-option" role="option" aria-selected="false" tabindex="-1" id="country-option-{{ loop.index0 }}" data-country="{{ country }}" data-aliases="{{ country_aliases.get(country, ())|join('|') }}" data-search-aliases="{{ country_autocomplete_aliases.get(country, country_aliases.get(country, ()))|join('|') }}">
+                <span>{{ country }}</span>
+                {% if country_aliases.get(country) %}<span class="country-aliases">{{ country_aliases.get(country)|join(' / ') }}</span>{% endif %}
+              </button>
+            {% endfor %}
+            </div>
+          </div>
+        </label>
+        <label><span data-i18n="source">Source</span>
+          <select id="s">
+            <option value="" data-i18n="allLoadedSources">All loaded sources</option>
+            {% for key, item in source_details.items() %}
+            <option value="{{ key }}" data-i18n="sourceTitle_{{ key }}">{{ item.title }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="search-actions">
+          <button type="submit" data-i18n="search">Search</button>
+          <button id="reset-search" class="reset-button" type="reset" data-i18n="reset">Reset</button>
+        </div>
+      </form>
+      <p id="country-hint" class="search-hint" data-i18n="searchHint">Search by name, country, or both. Type a few letters to find a country or alias.</p>
+      <div id="results-summary" class="results-summary" hidden>
+        <p id="m" tabindex="-1" aria-live="polite"></p>
+        <label id="page-size-control" class="page-size-control" hidden>
+          <span data-i18n="resultsPerPage">Results per page</span>
+          <select id="page-size">
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="75">75</option>
+            <option value="100">100</option>
+            <option value="all" data-i18n="allResults">All results</option>
+          </select>
+        </label>
+      </div>
+      <div id="r"></div>
+      <nav id="pagination" class="pagination" aria-label="Search result pages" data-i18n-aria-label="resultPages" hidden>
+        <button id="previous-page" type="button" data-i18n="previous">Previous</button>
+        <span id="page-indicator" aria-live="polite"></span>
+        <button id="next-page" type="button" data-i18n="nextPage">Next page</button>
+      </nav>
+      <aside class="notice-box">
+        <b data-i18n="screeningNotice">Screening notice:</b> <span data-i18n="screeningNoticeText">A result is a possible name match, not a determination. Verify identifiers against the original source and apply the relevant due-diligence process.</span>
+      </aside>
+    </section>
+
+    <section class="card source-panel">
+      <div class="panel-header">
+        <div>
+          <p class="section-kicker" data-i18n="officialLists">Official lists</p>
+          <h2 data-i18n="officialLinksHeading">Official source links</h2>
+          <p class="panel-intro" data-i18n="officialLinksDescription">Consult the latest information directly from the responsible authority.</p>
+        </div>
+      </div>
+      <div class="source-grid">
+        {% for key, item in source_details.items() %}
+        <article class="source-card">
+          <span class="tag {% if item.access == 'Restricted' %}restricted{% endif %}" data-i18n="{% if item.access == 'Restricted' %}accessRestricted{% else %}accessPublic{% endif %}">{{ item.access }}</span>
+          <h3 data-i18n="sourceTitle_{{ key }}">{{ item['title'] }}</h3>
+          <p data-i18n="sourceDescription_{{ key }}">{{ item['description'] }}</p>
+          <a href="{{ source_pages[key] }}" target="_blank" rel="noopener"><span data-i18n="openOfficialSource">Open official source</span> <span>↗</span></a>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="card panel-secondary">
+      <div class="panel-header compact">
+        <div>
+          <p class="section-kicker" data-i18n="status">Status</p>
+          <h2 data-i18n="sourceStatus">Source status</h2>
+        </div>
+      </div>
+      <p id="refresh-message" class="refresh-message" aria-live="polite"></p>
+      <div class="status">
+        {% for key, item in source_details.items() %}
+        {% set x = logs_by_source.get(key) %}
+        <div>
+          <b data-i18n="sourceTitle_{{ key }}">{{ item['title'] }}</b>
+          <span class="{% if x %}{{x['status']|lower}}{% else %}not-loaded{% endif %}" data-status="{{x['status'] if x else 'NOT_LOADED'}}">{{x['status'] if x else 'NOT_LOADED'}}</span>
+          <small>
+            <span data-record-count="{{x['count'] if x else 0}}">{{x['count'] if x else 0}} records</span>
+            {% if x and x['retrieved_at'] %} · <time data-retrieved-at="{{x['retrieved_at']}}">{{x['retrieved_at']}}</time>{% else %} · <span data-i18n="notRefreshedYet">Not refreshed yet</span>{% endif %}
+            {% if x and x['message'] %} · <span data-status-message="{{x['message']}}">{{x['message']}}</span>{% endif %}
+          </small>
+          <button type="button" class="refresh-button" data-source="{{key}}" data-i18n="refresh">Refresh</button>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <footer data-i18n="footer">OCHA AIT prototype · Not a legal determination or substitute for due diligence.</footer>
+
+  <script src="/static/i18n.js?v=20261116-1"></script>
+  <script>
+    const f=document.querySelector('#f'),m=document.querySelector('#m'),r=document.querySelector('#r');
+    const searchPanel=document.querySelector('#search-panel');
+    const resultsSummary=document.querySelector('#results-summary');
+    const pageSizeControl=document.querySelector('#page-size-control');
+    const pageSize=document.querySelector('#page-size');
+    const languageButtons=Array.from(document.querySelectorAll('[data-language]'));
+    const translations=window.OCHA_TRANSLATIONS;
+    const countryInput=document.querySelector('#c');
+    const countryList=document.querySelector('#country-options');
+    const countryOptions=Array.from(countryList.querySelectorAll('[role="option"]'));
+    const pagination=document.querySelector('#pagination');
+    const previousPage=document.querySelector('#previous-page');
+    const nextPage=document.querySelector('#next-page');
+    const pageIndicator=document.querySelector('#page-indicator');
+    const refreshMessage=document.querySelector('#refresh-message');
+    let activeCountry=-1;
+    let searchGeneration=0;
+    let currentQuery={name:'',country:'',source:'',page_size:'25'};
+    let currentPage=1;
+    let language='en';
+    let latestSearchResponse=null;
+    let currentSearchMessage=null;
+    let currentRefreshMessage=null;
+
+    function translate(key,values={}){
+      const text=translations[language][key]||translations.en[key]||key;
+      return text.replace(/\{(\w+)\}/g,(match,name)=>values[name]??match);
+    }
+
+    function formatNumber(value){
+      return new Intl.NumberFormat(language).format(Number(value)||0);
+    }
+
+    function translateStatus(status){
+      const keys={
+        OK:'statusAvailable',
+        NOT_CONFIGURED:'statusNotConfiguredTranslated',
+        ERROR:'statusErrorTranslated',
+        NOT_LOADED:'statusNotLoadedTranslated'
+      };
+      return translate(keys[status]||'statusNotLoadedTranslated');
+    }
+
+    function applyLanguage(selectedLanguage){
+      language=translations[selectedLanguage]?selectedLanguage:'en';
+      document.documentElement.lang=language;
+      document.querySelectorAll('[data-i18n]').forEach(element=>{
+        element.textContent=translate(element.dataset.i18n);
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(element=>{
+        element.placeholder=translate(element.dataset.i18nPlaceholder);
+      });
+      document.querySelectorAll('[data-i18n-aria-label]').forEach(element=>{
+        element.setAttribute('aria-label',translate(element.dataset.i18nAriaLabel));
+      });
+      languageButtons.forEach(button=>{
+        button.setAttribute('aria-pressed',String(button.dataset.language===language));
+      });
+      document.querySelectorAll('[data-status]').forEach(element=>{
+        element.textContent=translateStatus(element.dataset.status);
+      });
+      document.querySelectorAll('[data-record-count]').forEach(element=>{
+        element.textContent=translate('recordsCount',{count:formatNumber(element.dataset.recordCount)});
+      });
+      document.querySelectorAll('[data-retrieved-at]').forEach(element=>{
+        const date=new Date(element.dataset.retrievedAt);
+        element.textContent=Number.isNaN(date.getTime())
+          ?element.dataset.retrievedAt
+          :new Intl.DateTimeFormat(language,{dateStyle:'medium',timeStyle:'short'}).format(date);
+      });
+      document.querySelectorAll('[data-status-message]').forEach(element=>{
+        const message=element.dataset.statusMessage;
+        element.textContent=message==='UNGM integration requires an authorized HTTPS endpoint and UNGM_API_TOKEN'
+          ?translate('ungmConfigurationMessage')
+          :message;
+      });
+      if(currentSearchMessage){
+        m.textContent=translate(currentSearchMessage.key,currentSearchMessage.values);
+      }
+      if(latestSearchResponse){
+        renderSearchResponse(latestSearchResponse);
+      }
+      if(currentRefreshMessage){
+        showRefreshMessage(currentRefreshMessage.key,currentRefreshMessage.values);
+      }
+    }
+
+    function showRefreshMessage(key,values={}){
+      currentRefreshMessage={key,values};
+      const displayValues={...values};
+      if(displayValues.sourceKey){
+        displayValues.source=translate(`sourceTitle_${displayValues.sourceKey}`);
+        delete displayValues.sourceKey;
+      }
+      if(displayValues.count!==undefined){
+        displayValues.count=formatNumber(displayValues.count);
+      }
+      refreshMessage.textContent=translate(key,displayValues);
+    }
+
+    function showSearchMessage(key,values={},showPageSize=false){
+      currentSearchMessage={key,values};
+      resultsSummary.hidden=false;
+      pageSizeControl.hidden=!showPageSize;
+      m.textContent=translate(key,values);
+    }
+
+    function closeCountrySuggestions(){
+      countryList.hidden=true;
+      countryInput.setAttribute('aria-expanded','false');
+      countryInput.removeAttribute('aria-activedescendant');
+      activeCountry=-1;
+    }
+
+    function normalizeCountrySearch(value){
+      return value.normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase().replace(/[^a-z0-9]/g,"");
+    }
+    function updateCountrySuggestions(){
+      const prefix=normalizeCountrySearch(countryInput.value.trim());
+      let shown=0;
+      countryOptions.forEach(option=>{
+        const aliases=option.dataset.searchAliases.split('|').filter(Boolean);
+        const matches=normalizeCountrySearch(option.dataset.country).includes(prefix)
+          ||aliases.some(alias=>normalizeCountrySearch(alias).includes(prefix));
+        const visible=matches&&(prefix!==''||shown<8);
+        option.hidden=!visible;
+        option.setAttribute('aria-selected','false');
+        if(visible)shown++;
+      });
+      countryList.hidden=shown===0;
+      countryInput.setAttribute('aria-expanded',String(shown>0));
+      countryInput.removeAttribute('aria-activedescendant');
+      activeCountry=-1;
+    }
+
+    function chooseCountry(option){
+      countryInput.value=option.dataset.country;
+      closeCountrySuggestions();
+      countryInput.focus();
+    }
+
+    function setActiveCountry(index){
+      const visibleOptions=countryOptions.filter(option=>!option.hidden);
+      if(!visibleOptions.length)return;
+      activeCountry=(index+visibleOptions.length)%visibleOptions.length;
+      countryOptions.forEach(option=>option.setAttribute('aria-selected','false'));
+      const option=visibleOptions[activeCountry];
+      option.setAttribute('aria-selected','true');
+      countryInput.setAttribute('aria-activedescendant',option.id);
+      option.scrollIntoView({block:'nearest'});
+    }
+
+    countryInput.addEventListener('focus',updateCountrySuggestions);
+    countryInput.addEventListener('input',updateCountrySuggestions);
+    countryInput.addEventListener('keydown',event=>{
+      if(event.key==='ArrowDown'&&!countryList.hidden){
+        event.preventDefault();
+        setActiveCountry(activeCountry+1);
+      }else if(event.key==='ArrowUp'&&!countryList.hidden){
+        event.preventDefault();
+        setActiveCountry(activeCountry<0?-1:activeCountry-1);
+      }else if(event.key==='Enter'&&activeCountry>=0){
+        event.preventDefault();
+        chooseCountry(countryOptions.find(option=>option.getAttribute('aria-selected')==='true'));
+      }else if(event.key==='Escape'){
+        closeCountrySuggestions();
+      }
+    });
+    countryInput.addEventListener('blur',()=>setTimeout(closeCountrySuggestions,0));
+    countryList.addEventListener('pointerdown',event=>{
+      const option=event.target.closest('[role="option"]');
+      if(!option)return;
+      event.preventDefault();
+      chooseCountry(option);
+    });
+    document.addEventListener('pointerdown',event=>{
+      if(!event.target.closest('.country-control'))closeCountrySuggestions();
+    });
+
+    f.addEventListener('reset',()=>{
+      searchGeneration++;
+      currentQuery={name:'',country:'',source:'',page_size:'25'};
+      currentPage=1;
+      latestSearchResponse=null;
+      currentSearchMessage=null;
+      closeCountrySuggestions();
+      m.textContent='';
+      r.innerHTML='';
+      resultsSummary.hidden=true;
+      pageSizeControl.hidden=true;
+      pageSize.value='25';
+      pagination.hidden=true;
+      setTimeout(()=>document.querySelector('#n').focus(),0);
+    });
+
+    async function loadResults(page,scrollToResults=false){
+      const requestGeneration=++searchGeneration;
+      latestSearchResponse=null;
+      showSearchMessage('searching');
+      r.innerHTML='';
+      pagination.hidden=true;
+      const params=new URLSearchParams({...currentQuery,page:String(page)});
+      const response=await fetch('/api/search?'+params);
+      const j=await response.json();
+      if(requestGeneration!==searchGeneration)return;
+      if(j.error){
+        showSearchMessage('searchError',{error:j.error});
+        return;
+      }
+      latestSearchResponse=j;
+      renderSearchResponse(j);
+      if(scrollToResults){
+        searchPanel.scrollIntoView({behavior:'instant',block:'start'});
+      }
+    }
+
+    function renderSearchResponse(j){
+      currentPage=j.page;
+      if(j.count===0){
+        showSearchMessage('noMatchingRecords');
+        r.innerHTML=`<p data-i18n="noMatchesLoaded">${esc(translate('noMatchesLoaded'))}</p>`;
+        return;
+      }
+      const first=(j.page-1)*j.page_size+1;
+      const last=first+j.results.length-1;
+      const summaryKey=j.count===1?'resultSummaryOne':'resultSummary';
+      showSearchMessage(summaryKey,{
+        first:formatNumber(first),
+        last:formatNumber(last),
+        count:formatNumber(j.count)
+      },true);
+      r.innerHTML=j.results.map(x=>{
+        const sourceKey=`sourceShort_${x.source}`;
+        const sourceName=translations[language][sourceKey]||x.source;
+        const entityTypes={
+          individual:'entityIndividual',
+          entity:'entityEntity',
+          organization:'entityOrganization',
+          vessel:'entityVessel'
+        };
+        const typeKey=entityTypes[String(x.entity_type||'').toLowerCase()];
+        return `<article><h3>${esc(x.name)}</h3><dl><dt>${esc(translate('resultSource'))}</dt><dd>${esc(sourceName)}</dd><dt>${esc(translate('resultType'))}</dt><dd>${esc(typeKey?translate(typeKey):translate('notSpecified'))}</dd><dt>${esc(translate('resultCountry'))}</dt><dd>${esc(x.country||translate('notSpecified'))}</dd><dt>${esc(translate('resultAliases'))}</dt><dd>${esc(x.aliases||translate('noneShown'))}</dd><dt>${esc(translate('resultProgramme'))}</dt><dd>${esc(x.programmes||translate('notSpecified'))}</dd><dt>${esc(translate('resultReference'))}</dt><dd>${esc(x.source_ref||translate('notSpecified'))}</dd></dl><a href="${x.source_url}" target="_blank" rel="noopener"><span>${esc(translate('openOfficialSource'))}</span> ↗</a></article>`;
+      }).join('');
+      pageIndicator.textContent=translate('pageIndicator',{
+        page:formatNumber(j.page),
+        total:formatNumber(j.total_pages)
+      });
+      previousPage.disabled=!j.has_previous;
+      nextPage.disabled=!j.has_next;
+      pagination.hidden=j.total_pages<=1;
+    }
+
+    languageButtons.forEach(button=>{
+      button.addEventListener('click',()=>{
+        localStorage.setItem('ocha-language',button.dataset.language);
+        applyLanguage(button.dataset.language);
+      });
+    });
+    const savedLanguage=localStorage.getItem('ocha-language');
+    applyLanguage(translations[savedLanguage]?savedLanguage:'en');
+
+    f.addEventListener('submit',async e=>{
+      e.preventDefault();
+      const name=n.value.trim(),country=c.value.trim();
+      if(!name&&!country){
+        searchGeneration++;
+        latestSearchResponse=null;
+        showSearchMessage('enterNameOrCountry');
+        r.innerHTML='';
+        pagination.hidden=true;
+        return;
+      }
+      if(name.length===1){
+        searchGeneration++;
+        latestSearchResponse=null;
+        showSearchMessage('minimumNameLength');
+        r.innerHTML='';
+        pagination.hidden=true;
+        return;
+      }
+      currentQuery={name,country,source:s.value,page_size:pageSize.value};
+      loadResults(1);
+    });
+    pageSize.addEventListener('change',()=>{
+      currentQuery.page_size=pageSize.value;
+      loadResults(1);
+    });
+    previousPage.addEventListener('click',()=>loadResults(currentPage-1,true));
+    nextPage.addEventListener('click',()=>loadResults(currentPage+1,true));
+    document.querySelectorAll('.refresh-button').forEach(button=>{
+      button.addEventListener('click',async()=>{
+        const source=button.dataset.source;
+        button.disabled=true;
+        showRefreshMessage('refreshing',{sourceKey:source});
+        try {
+          const response=await fetch(`/api/refresh/${encodeURIComponent(source)}`,{method:'POST'});
+          const result=await response.json();
+          if(!response.ok) throw new Error(result.error||`${translate('refreshFailed')} (${response.status})`);
+          showRefreshMessage('refreshSuccess',{sourceKey:source,count:result.count});
+          window.location.reload();
+        } catch(error) {
+          showRefreshMessage('refreshFailure',{sourceKey:source,error:error.message});
+          button.disabled=false;
+        }
+      });
+    });
+    function esc(v){return String(v??'').replace(/[&<>"']/g,a=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[a]))}
+  </script>
+</body>
+</html>
