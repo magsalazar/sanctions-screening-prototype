@@ -22,13 +22,13 @@ After the local database has been refreshed, run:
 python export_offline_html.py
 ```
 
-This creates `OCHA_Sanctions_Search_Offline.html`, a self-contained English/French/Spanish search page with the records currently in the database. Share the file through an approved internal location; colleagues should download it and open it in a browser. It does not need Python or a local server.
+This creates `OCHA_Sanctions_Search_Offline.html`, a self-contained English/French/Spanish search page with the records currently in the database, and a matching root `index.html` for GitHub Pages. Share the offline file through an approved internal location; colleagues should download it and open it in a browser. It does not need Python or a local server.
 
 The HTML is a fixed snapshot: it does not refresh its records, and it has no source-refresh controls. Generate and redistribute a new file after refreshing the database. The source-status panel shows each source's retrieval time. UNGM remains unavailable unless its authorized feed is configured. A result is only a possible match; users must verify it against the official source.
 
-## GitHub
+## GitHub Pages
 
-Pushing this project to GitHub publishes its source code; it does not run the Flask application or its daily refresh job. GitHub Pages cannot host the Flask backend. The local database, refresh logs, virtual environments, and generated offline HTML are excluded by `.gitignore`; regenerate the database and offline package locally as needed. Use approved Python hosting and a managed database for a shared live service.
+GitHub Pages serves the generated root `index.html` as a static snapshot; it does not run the Flask application or its daily refresh job. Run `python export_offline_html.py` after refreshing the database, then commit and push `index.html` to update the Pages site. This repository and Pages site are public, so the snapshot's indexed names are publicly accessible. The local database, refresh logs, virtual environments, and downloadable offline package are excluded by `.gitignore`. Use approved Python hosting and a managed database for a shared live service.
 
 ## Country search aliases
 

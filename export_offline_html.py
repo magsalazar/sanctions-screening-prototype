@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -81,7 +82,7 @@ def build_html(page, records, country_aliases, generated_at):
         raise RuntimeError("Could not replace the live-app scripts in the page template")
     if "/static/" in page or "fetch(" in page:
         raise RuntimeError("The offline export still contains a server dependency")
-    return page
+    return "\n".join(line.rstrip() for line in page.splitlines()) + "\n"
 
 
 def export(output_path):
@@ -123,6 +124,9 @@ def export(output_path):
 
 
 if __name__ == "__main__":
-    destination = ROOT / "OCHA_Sanctions_Search_Offline.html"
-    record_count, file_size = export(destination)
-    print(f"Created {destination.name}: {record_count:,} records, {file_size:,} bytes")
+    offline_package = ROOT / "OCHA_Sanctions_Search_Offline.html"
+    pages_entry_point = ROOT / "index.html"
+    record_count, file_size = export(offline_package)
+    shutil.copyfile(offline_package, pages_entry_point)
+    print(f"Created {offline_package.name}: {record_count:,} records, {file_size:,} bytes")
+    print(f"Created {pages_entry_point.name} for GitHub Pages")
