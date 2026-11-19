@@ -14,6 +14,24 @@ python app.py
 
 Open `http://127.0.0.1:5000`. Select EN, FR or ES in the page header; the choice is saved in the browser. Sources can also be refreshed individually from the Source status panel.
 
+## Search Report demonstration
+
+Open the separate local workflow at `http://127.0.0.1:5000/certification`. It records the requesting organisation and requester details, registers third parties, screens names and aliases through `/api/search`, and lets the reviewer prepare an unsigned Search Report. Country fields reuse the country autocomplete. Source coverage distinguishes searchable indexed snapshots from unavailable sources and failed queries; a partial search is not presented as a completed check.
+
+Fuzzy name matching is optional and off by default. It uses a 75% token-similarity heuristic (for example, `John Kony` can return `Joseph Kony`); scores are not probabilities, identity determinations, or proof. Fuzzy searches can return unrelated names. Review every possible match against the original source.
+
+The report's **Export PDF** button opens the browser's print dialog; choose **Save as PDF**. This creates an unsigned demonstration report only, not an official certificate. Exercise data and results remain in the open browser session; there is no trusted timestamp, persistent audit trail, digital signature, independent verification, or email integration.
+
+Use synthetic data only. Entity names and aliases are sent to the app's search endpoint and may appear in server request logs. Do not enter real partner, personal, or other sensitive information. The app has no user authentication or authorization and is not suitable for real screening or internal use without additional safeguards. The GitHub Pages static snapshot excludes the certification workflow.
+
+## Render demonstration
+
+The `render.yaml` Blueprint configures a public, free Render web service for synthetic-data demonstrations only. Connect this repository to Render and create a Blueprint from a branch containing the application and `render.yaml`; Render will deploy the Flask app and give it an HTTPS address. Open `/certification` on that address for the Search Report workflow. GitHub Pages remains a separate static snapshot and does not run Flask.
+
+The build downloads available source data into SQLite; failures are logged and unavailable sources remain visible as coverage gaps. The build fails if no records load. The database is a snapshot from the build, not a live feed. To refresh it, select **Manual Deploy > Clear build cache & deploy** in Render, and check source status and retrieval dates before demonstrating. The public source-refresh endpoint and its buttons are disabled by the Blueprint; local runs retain the existing refresh controls unless `SOURCE_REFRESH_ENABLED` is set to `false`.
+
+Render's free service sleeps after inactivity and has an ephemeral filesystem. Runtime database changes are lost on restart or spin-down; the built snapshot is restored. Free usage is limited and can incur charges or suspension if included bandwidth or build minutes are exceeded. This service is public and unauthenticated: use synthetic data only, do not enter sensitive information, and do not treat it as a production service. Review access controls, request logging, rate limits, privacy, and licensing before any broader deployment.
+
 ## Offline HTML package
 
 After the local database has been refreshed, run:
@@ -22,7 +40,7 @@ After the local database has been refreshed, run:
 python export_offline_html.py
 ```
 
-This creates `OCHA_Sanctions_Search_Offline.html`, a self-contained English/French/Spanish search page with the records currently in the database, and a matching root `index.html` for GitHub Pages. Share the offline file through an approved internal location; colleagues should download it and open it in a browser. It does not need Python or a local server.
+This creates `OCHA_Sanctions_Search_Offline.html`, a self-contained English/French/Spanish search page with the records currently in the database, including opt-in fuzzy name matching, and a matching root `index.html` for GitHub Pages. These static files do not include the local Search Report workflow. Share the offline file through an approved internal location; colleagues should download it and open it in a browser. It does not need Python or a local server.
 
 The HTML is a fixed snapshot: it does not refresh its records, and it has no source-refresh controls. Generate and redistribute a new file after refreshing the database. The source-status panel shows each source's retrieval time. UNGM remains unavailable unless its authorized feed is configured. A result is only a possible match; users must verify it against the official source.
 

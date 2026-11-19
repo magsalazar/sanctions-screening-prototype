@@ -1,0 +1,15 @@
+{% macro country_control(input_id, list_id, label_key, label, placeholder_key, placeholder, required=false, maxlength=0, describedby='') -%}
+<label><span data-i18n="{{ label_key }}">{{ label }}</span>
+  <div class="country-control">
+    <input id="{{ input_id }}" data-country-input role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="{{ list_id }}" {% if describedby %}aria-describedby="{{ describedby }}"{% endif %} autocomplete="off" placeholder="{{ placeholder }}" data-i18n-placeholder="{{ placeholder_key }}" {% if required %}required{% endif %} {% if maxlength %}maxlength="{{ maxlength }}"{% endif %}>
+    <div id="{{ list_id }}" class="country-suggestions" role="listbox" aria-label="Country suggestions" data-i18n-aria-label="countrySuggestions" hidden>
+      {% for country in countries %}
+      <button type="button" class="country-option" role="option" aria-selected="false" tabindex="-1" id="{{ list_id }}-option-{{ loop.index0 }}" data-country="{{ country }}" data-aliases="{{ country_aliases.get(country, ())|join('|') }}" data-search-aliases="{{ country_autocomplete_aliases.get(country, country_aliases.get(country, ()))|join('|') }}">
+        <span>{{ country }}</span>
+        {% if country_aliases.get(country) %}<span class="country-aliases">{{ country_aliases.get(country)|join(' / ') }}</span>{% endif %}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+</label>
+{%- endmacro %}

@@ -7,6 +7,7 @@ from contextlib import closing
 from unittest.mock import patch
 
 import app as sanctions_app
+import export_offline_html
 import ingest
 
 
@@ -270,6 +271,139 @@ class CountrySearchTests(unittest.TestCase):
                     {record["name"] for record in response.json["results"]},
                     {expected_name},
                 )
+
+    def test_due_diligence_demo_has_a_separate_flask_page_not_static_export(self):
+        page = self.client.get("/").get_data(as_text=True)
+        certification_page = self.client.get("/certification").get_data(as_text=True)
+        static_page = export_offline_html.build_html(
+            page,
+            [],
+            {},
+            "test timestamp",
+        )
+
+        self.assertIn('href="/certification"', page)
+        self.assertNotIn('id="partner-certification"', page)
+        self.assertIn('id="partner-certification"', certification_page)
+        self.assertIn('id="screen-certification-entities"', certification_page)
+        self.assertIn("data-source-sha256=", certification_page)
+        self.assertIn('data-i18n="certificationDemoNotice"', certification_page)
+        self.assertIn('id="cert-entity-country-options"', certification_page)
+        self.assertIn('id="cert-organisation"', certification_page)
+        self.assertIn('id="cert-screened-by"', certification_page)
+        self.assertIn('id="cert-role"', certification_page)
+        self.assertIn('id="cert-user-email"', certification_page)
+        self.assertIn('type="email"', certification_page)
+        self.assertIn('id="edit-certification-request"', certification_page)
+        self.assertIn('id="reset-certification-request"', certification_page)
+        self.assertIn('id="reset-certification-entity"', certification_page)
+        self.assertIn('id="new-certification-exercise"', certification_page)
+        self.assertIn("Start a new Search Report", certification_page)
+        self.assertNotIn("CBPF", certification_page)
+        self.assertNotIn("cert-project-", certification_page)
+        self.assertNotIn("Funding application reference", certification_page)
+        self.assertNotIn('id="search-panel"', certification_page)
+        self.assertNotIn('id="partner-certification"', static_page)
+        self.assertNotIn("/static/certification.js", static_page)
+        self.assertNotIn('href="/certification"', static_page)
+        self.assertNotIn("fetch(", static_page)
+
+    def test_source_refresh_can_be_disabled_for_public_demonstrations(self):
+        with patch.dict(sanctions_app.app.config, {"SOURCE_REFRESH_ENABLED": False}):
+            with patch.object(sanctions_app, "refresh") as refresh:
+                response = self.client.post("/api/refresh/OFAC_SDN")
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json["error"], "Source refresh is disabled")
+            refresh.assert_not_called()
+            page = self.client.get("/").get_data(as_text=True)
+            self.assertNotIn('class="refresh-button"', page)
+
+        with patch.dict(sanctions_app.app.config, {"SOURCE_REFRESH_ENABLED": True}):
+            with patch.object(sanctions_app, "refresh", return_value=2) as refresh:
+                response = self.client.post("/api/refresh/OFAC_SDN")
+            self.assertEqual(response.status_code, 200)
+            refresh.assert_called_once_with("OFAC_SDN")
+            page = self.client.get("/").get_data(as_text=True)
+            self.assertIn('class="refresh-button"', page)
+
+    def test_seed_reports_when_no_sources_load(self):
+        with closing(sqlite3.connect(self.database)) as connection:
+            with connection:
+                connection.execute("DELETE FROM records")
+        with patch.object(sanctions_app, "SOURCES", {"OFAC_SDN": "unused"}):
+            with patch.object(sanctions_app, "refresh", side_effect=RuntimeError("failed")):
+                with self.assertLogs(sanctions_app.app.logger, level="WARNING"):
+                    self.assertEqual(sanctions_app.ensure_seed_data(), 0)
+
+    def test_pages_include_skip_link_branding_and_un_footer(self):
+        for path in ("/", "/certification"):
+            with self.subTest(path=path):
+                page = self.client.get(path).get_data(as_text=True)
+                self.assertIn('class="skip-link"', page)
+                self.assertIn('href="#main-content"', page)
+                self.assertIn('id="main-content"', page)
+                self.assertIn('class="un-branding-bar"', page)
+                self.assertIn('href="https://www.un.org/"', page)
+                self.assertIn('href="https://search.un.org/"', page)
+                self.assertIn('class="un-site-footer"', page)
+                self.assertIn('footerCopyright', page)
+                self.assertIn('footerTerms', page)
+                self.assertIn('footerPrivacy', page)
+                self.assertIn('footerSiteIndex', page)
+                self.assertIn('footerFraudAlert', page)
+
+    def test_fuzzy_search_finds_similar_names_and_exposes_a_heuristic_score(self):
+        with closing(sqlite3.connect(self.database)) as connection:
+            with connection:
+                connection.execute(
+                    """
+                    INSERT INTO records(source,name,aliases,country,source_url)
+                    VALUES(?,?,?,?,?)
+                    """,
+                    (
+                        "OFAC_SDN",
+                        "Joseph Kony",
+                        "",
+                        "Uganda",
+                        "https://example.org",
+                    ),
+                )
+
+        exact_response = self.client.get(
+            "/api/search",
+            query_string={
+                "name": "John Kony",
+                "source": "OFAC_SDN",
+                "page_size": "all",
+            },
+        )
+        fuzzy_response = self.client.get(
+            "/api/search",
+            query_string={
+                "name": "John Kony",
+                "source": "OFAC_SDN",
+                "fuzzy_match": "true",
+                "page_size": "all",
+            },
+        )
+
+        self.assertEqual(exact_response.status_code, 200)
+        self.assertEqual(exact_response.json["count"], 0)
+        self.assertEqual(fuzzy_response.status_code, 200)
+        self.assertEqual(
+            [result["name"] for result in fuzzy_response.json["results"]],
+            ["Joseph Kony"],
+        )
+        self.assertEqual(fuzzy_response.json["results"][0]["match_type"], "fuzzy")
+        self.assertEqual(fuzzy_response.json["results"][0]["match_score"], 80.0)
+
+    def test_fuzzy_search_rejects_invalid_toggle_value(self):
+        response = self.client.get(
+            "/api/search",
+            query_string={"name": "Person", "fuzzy_match": "maybe"},
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_country_filters_name_search_and_appears_in_suggestions(self):
         response = self.client.get("/api/search?name=Person&country=Uni")

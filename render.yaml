@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: sanctions-search-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python -c "import sys; from app import ensure_seed_data; sys.exit(0 if ensure_seed_data() else 'No source records loaded')"
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 app:app
+    envVars:
+      - key: SOURCE_REFRESH_ENABLED
+        value: "false"

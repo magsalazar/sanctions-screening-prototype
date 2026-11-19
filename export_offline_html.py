@@ -49,6 +49,30 @@ def build_html(page, records, country_aliases, generated_at):
         1,
     )
     page = re.sub(
+        r'<section id="partner-certification"[\s\S]*?</section>\s*',
+        "",
+        page,
+        count=1,
+    )
+    page = re.sub(
+        r'\s*<a href="/certification" class="local-certification-link"[^>]*>.*?</a>',
+        "",
+        page,
+        count=1,
+    )
+    page = re.sub(
+        r'\s*<script src="/static/country_autocomplete\.js[^"]*"></script>',
+        "",
+        page,
+        count=1,
+    )
+    page = re.sub(
+        r'\s*<script src="/static/certification\.js[^"]*"></script>',
+        "",
+        page,
+        count=1,
+    )
+    page = re.sub(
         r'\s*<p id="refresh-message"[^>]*></p>',
         "",
         page,

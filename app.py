@@ -1,10 +1,12 @@
 import json
+import os
 import sqlite3
 import unicodedata
 from contextlib import closing
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
+from rapidfuzz import fuzz, process, utils
 
 from config import SOURCE_DETAILS, SOURCE_PAGES, SOURCES
 from ingest import DB, SourceNotConfigured, init, refresh
@@ -17,6 +19,40 @@ def country_alias_key(value):
         for character in normalized
         if not unicodedata.combining(character) and character.isalnum()
     )
+
+
+FUZZY_MATCH_THRESHOLD = 75.0
+
+
+def _normalized_name(value):
+    normalized = unicodedata.normalize("NFKD", value).casefold()
+    unaccented = "".join(
+        character
+        for character in normalized
+        if not unicodedata.combining(character)
+    )
+    return " ".join(
+        "".join(character if character.isalnum() else " " for character in unaccented).split()
+    )
+
+
+def _candidate_similarity(normalized_query, normalized_candidate):
+    if not normalized_query:
+        return 0.0, False
+    if normalized_query in normalized_candidate:
+        return 100.0, True
+    query_tokens = normalized_query.split()
+    candidate_tokens = normalized_candidate.split()
+    if not candidate_tokens:
+        return 0.0, False
+    token_scores = [
+        max(fuzz.ratio(query_token, candidate_token) for candidate_token in candidate_tokens)
+        for query_token in query_tokens
+    ]
+    coverage = min(len(query_tokens), len(candidate_tokens)) / max(
+        len(query_tokens), len(candidate_tokens)
+    )
+    return sum(token_scores) / len(token_scores) * coverage, False
 
 
 DEMOCRATIC_REPUBLIC_OF_CONGO = "Democratic Republic of the Congo"
@@ -247,6 +283,9 @@ SEARCH_PAGE_SIZES = (25, 50, 75, 100)
 SEARCH_PAGE_SIZE = 25
 
 app = Flask(__name__)
+app.config["SOURCE_REFRESH_ENABLED"] = (
+    os.environ.get("SOURCE_REFRESH_ENABLED", "true").casefold() == "true"
+)
 init()
 
 def ensure_seed_data():
@@ -262,6 +301,8 @@ def ensure_seed_data():
             refresh(source)
         except Exception as exc:
             app.logger.warning("Initial refresh for %s failed: %s", source, exc)
+    with closing(sqlite3.connect(DB)) as connection:
+        return connection.execute("SELECT COUNT(*) FROM records").fetchone()[0]
 
 def conn():
     connection = sqlite3.connect(DB)
@@ -269,8 +310,7 @@ def conn():
     return connection
 
 
-@app.get('/')
-def home():
+def _page_context():
     connection = conn()
     logs = connection.execute("SELECT * FROM refresh_log ORDER BY source").fetchall()
     stats = connection.execute(
@@ -293,17 +333,27 @@ def home():
         countries.setdefault(canonical.casefold(), canonical)
     for canonical in COUNTRY_SUGGESTION_ALIASES:
         countries.setdefault(canonical.casefold(), canonical)
-    return render_template(
-        "index.html",
-        source_details=SOURCE_DETAILS,
-        source_pages=SOURCE_PAGES,
-        sources=SOURCES,
-        logs_by_source=logs_by_source,
-        stats=stats,
-        countries=sorted(countries.values(), key=str.casefold),
-        country_aliases=COUNTRY_SUGGESTION_ALIASES,
-        country_autocomplete_aliases=COUNTRY_AUTOCOMPLETE_ALIASES,
-    )
+    return {
+        "source_details": SOURCE_DETAILS,
+        "source_pages": SOURCE_PAGES,
+        "sources": SOURCES,
+        "logs_by_source": logs_by_source,
+        "stats": stats,
+        "countries": sorted(countries.values(), key=str.casefold),
+        "country_aliases": COUNTRY_SUGGESTION_ALIASES,
+        "country_autocomplete_aliases": COUNTRY_AUTOCOMPLETE_ALIASES,
+        "source_refresh_enabled": app.config["SOURCE_REFRESH_ENABLED"],
+    }
+
+
+@app.get('/')
+def home():
+    return render_template("index.html", **_page_context())
+
+
+@app.get('/certification')
+def certification():
+    return render_template("certification.html", **_page_context())
 
 
 @app.get('/api/search')
@@ -311,6 +361,10 @@ def search():
     query = " ".join(request.args.get("name", "").split())
     country = request.args.get("country", "").strip()
     source = request.args.get("source", "").strip()
+    fuzzy_value = request.args.get("fuzzy_match", "false").strip().casefold()
+    if fuzzy_value not in {"true", "false"}:
+        return jsonify(error="Fuzzy matching must be true or false"), 400
+    fuzzy_match = fuzzy_value == "true" and bool(query)
     requested_page_size = request.args.get(
         "page_size", str(SEARCH_PAGE_SIZE)
     ).strip().casefold()
@@ -330,7 +384,7 @@ def search():
         return jsonify(error="Enter a name or country to search"), 400
     conditions = []
     args = []
-    if query:
+    if query and not fuzzy_match:
         conditions.append("(name LIKE ? OR aliases LIKE ?)")
         args.extend((f"%{query}%", f"%{query}%"))
     if country:
@@ -354,8 +408,78 @@ def search():
     if source:
         conditions.append("source=?")
         args.append(source)
-    where = " AND ".join(conditions)
+    where = " AND ".join(conditions) or "1=1"
     connection = conn()
+    if fuzzy_match:
+        candidate_rows = connection.execute(
+            "SELECT * FROM records WHERE " + where
+            + " ORDER BY name COLLATE NOCASE, source, source_ref, id",
+            args,
+        )
+        records_by_id = {}
+        choices = []
+        choice_record_ids = []
+        for candidate_row in candidate_rows:
+            record = dict(candidate_row)
+            records_by_id[record["id"]] = record
+            for candidate in [record["name"], *(record.get("aliases") or "").split("|")]:
+                candidate = candidate.strip()
+                if candidate:
+                    choices.append(candidate)
+                    choice_record_ids.append(record["id"])
+        normalized_query = _normalized_name(query)
+        candidate_matches = process.extract(
+            query,
+            choices,
+            scorer=fuzz.WRatio,
+            processor=utils.default_process,
+            score_cutoff=FUZZY_MATCH_THRESHOLD,
+            limit=None,
+        )
+        scores_by_id = {}
+        for candidate, _, choice_index in candidate_matches:
+            record_id = choice_record_ids[choice_index]
+            score, exact = _candidate_similarity(
+                normalized_query,
+                _normalized_name(candidate),
+            )
+            if exact or score >= FUZZY_MATCH_THRESHOLD:
+                previous = scores_by_id.get(record_id)
+                if previous is None or exact or score > previous[0]:
+                    scores_by_id[record_id] = (100.0 if exact else score, exact)
+        ranked_rows = []
+        for record_id, (score, exact) in scores_by_id.items():
+            record = records_by_id[record_id]
+            record["match_type"] = "exact" if exact else "fuzzy"
+            record["match_score"] = round(score, 1)
+            ranked_rows.append(record)
+        ranked_rows.sort(
+            key=lambda record: (
+                -record["match_score"],
+                record["name"].casefold(),
+                record["source"],
+                record["source_ref"] or "",
+                record["id"],
+            )
+        )
+        count = len(ranked_rows)
+        page_size = count if show_all else int(requested_page_size)
+        total_pages = 1 if show_all else max(
+            1, (count + page_size - 1) // page_size
+        )
+        page = 1 if show_all else min(page, total_pages)
+        offset = (page - 1) * page_size
+        rows = ranked_rows if show_all else ranked_rows[offset:offset + page_size]
+        connection.close()
+        return jsonify(
+            results=rows,
+            count=count,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+            has_previous=page > 1,
+            has_next=page < total_pages,
+        )
     count = connection.execute(
         "SELECT COUNT(*) FROM records WHERE " + where, args
     ).fetchone()[0]
@@ -392,6 +516,8 @@ def search():
 
 @app.post('/api/refresh/<source>')
 def do_refresh(source):
+    if not app.config["SOURCE_REFRESH_ENABLED"]:
+        return jsonify(error="Source refresh is disabled"), 403
     if source not in SOURCES:
         return jsonify(error="Unknown source"), 404
     try:
