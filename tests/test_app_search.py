@@ -306,6 +306,7 @@ class CountrySearchTests(unittest.TestCase):
         self.assertNotIn('id="partner-certification"', static_page)
         self.assertNotIn("/static/certification.js", static_page)
         self.assertNotIn('href="/certification"', static_page)
+        self.assertNotIn('id="refresh-all-sources"', static_page)
         self.assertNotIn("fetch(", static_page)
 
     def test_source_refresh_can_be_disabled_for_public_demonstrations(self):
@@ -325,6 +326,7 @@ class CountrySearchTests(unittest.TestCase):
             refresh.assert_called_once_with("OFAC_SDN")
             page = self.client.get("/").get_data(as_text=True)
             self.assertIn('class="refresh-button"', page)
+            self.assertEqual(page.count('id="refresh-all-sources"'), 1)
 
     def test_seed_reports_when_no_sources_load(self):
         with closing(sqlite3.connect(self.database)) as connection:

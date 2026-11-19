@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="Search names and aliases across consolidated public and authoritative sanctions records for due-diligence review.">
   <title data-i18n="documentTitle">OCHA sanctions search prototype</title>
-  <link rel="stylesheet" href="/static/style.css?v=20261119-1643">
+  <link rel="stylesheet" href="/static/style.css?v=20261119-refresh-all">
 </head>
 <body>
   <a class="skip-link" href="#main-content" data-i18n="skipToContent">Skip to main content</a>
@@ -146,6 +146,7 @@
           <h2 data-i18n="sourceStatus">Source status</h2>
         </div>
       </div>
+      {% if source_refresh_enabled %}<button type="button" class="refresh-button" id="refresh-all-sources" data-i18n="refreshAll">Refresh all sources</button>{% endif %}
       <p id="refresh-message" class="refresh-message" aria-live="polite"></p>
       <div class="status">
         {% for key, item in source_details.items() %}
@@ -158,7 +159,6 @@
             {% if x and x['retrieved_at'] %} · <time data-retrieved-at="{{x['retrieved_at']}}">{{x['retrieved_at']}}</time>{% else %} · <span data-i18n="notRefreshedYet">Not refreshed yet</span>{% endif %}
             {% if x and x['message'] %} · <span data-status-message="{{x['message']}}">{{x['message']}}</span>{% endif %}
           </small>
-          {% if source_refresh_enabled %}<button type="button" class="refresh-button" data-source="{{key}}" data-i18n="refresh">Refresh</button>{% endif %}
         </div>
         {% endfor %}
       </div>
@@ -178,7 +178,7 @@
   </footer>
 
   <script src="/static/country_autocomplete.js?v=20261117-13"></script>
-  <script src="/static/i18n.js?v=20261117-13"></script>
+  <script src="/static/i18n.js?v=20261119-refresh-all"></script>
   <script>
     const f=document.querySelector('#f'),m=document.querySelector('#m'),r=document.querySelector('#r');
     const searchPanel=document.querySelector('#search-panel');
@@ -274,6 +274,11 @@
       }
       if(displayValues.count!==undefined){
         displayValues.count=formatNumber(displayValues.count);
+      }
+      if(displayValues.failures){
+        displayValues.failures=displayValues.failures.map(({sourceKey,error})=>
+          `${translate(`sourceTitle_${sourceKey}`)}: ${error}`
+        ).join('; ');
       }
       refreshMessage.textContent=translate(key,displayValues);
     }
@@ -405,23 +410,43 @@
     });
     previousPage.addEventListener('click',()=>loadResults(currentPage-1,true));
     nextPage.addEventListener('click',()=>loadResults(currentPage+1,true));
-    document.querySelectorAll('.refresh-button').forEach(button=>{
-      button.addEventListener('click',async()=>{
-        const source=button.dataset.source;
-        button.disabled=true;
-        showRefreshMessage('refreshing',{sourceKey:source});
+    const refreshAllButton=document.querySelector('#refresh-all-sources');
+    if(refreshAllButton){
+      refreshAllButton.addEventListener('click',async()=>{
+        const sources=Array.from(document.querySelectorAll('.status [data-source-key]'),element=>element.dataset.sourceKey);
+        const failures=[];
+        let count=0;
+        refreshAllButton.disabled=true;
+        for(const source of sources){
+          showRefreshMessage('refreshing',{sourceKey:source});
+          try {
+            const response=await fetch(`/api/refresh/${encodeURIComponent(source)}`,{method:'POST'});
+            const result=await response.json();
+            if(!response.ok) throw new Error(result.error||`${translate('refreshFailed')} (${response.status})`);
+            count++;
+          } catch(error) {
+            failures.push({sourceKey:source,error:error.message});
+          }
+        }
         try {
-          const response=await fetch(`/api/refresh/${encodeURIComponent(source)}`,{method:'POST'});
-          const result=await response.json();
-          if(!response.ok) throw new Error(result.error||`${translate('refreshFailed')} (${response.status})`);
-          showRefreshMessage('refreshSuccess',{sourceKey:source,count:result.count});
-          window.location.reload();
+          const response=await fetch('/');
+          if(!response.ok) throw new Error(`${translate('refreshStatusFailed')} (${response.status})`);
+          const page=new DOMParser().parseFromString(await response.text(),'text/html');
+          const updatedStatus=page.querySelector('.status');
+          const updatedStats=page.querySelector('.hero-stats');
+          if(!updatedStatus||!updatedStats) throw new Error(translate('refreshStatusFailed'));
+          document.querySelector('.status').replaceWith(updatedStatus);
+          document.querySelector('.hero-stats').replaceWith(updatedStats);
+          showRefreshMessage(failures.length?'refreshAllPartial':'refreshAllComplete',{count,failures});
+          applyLanguage(language);
+          if(currentQuery.name||currentQuery.country) await loadResults(1);
         } catch(error) {
-          showRefreshMessage('refreshFailure',{sourceKey:source,error:error.message});
-          button.disabled=false;
+          showRefreshMessage(failures.length?'refreshStatusFailurePartial':'refreshStatusFailure',{error:error.message,failures});
+        } finally {
+          refreshAllButton.disabled=false;
         }
       });
-    });
+    }
     function esc(v){return String(v??'').replace(/[&<>"']/g,a=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[a]))}
   </script>
 </body>
