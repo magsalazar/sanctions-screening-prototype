@@ -2782,7 +2782,7 @@ footer {
 
             <option value="WORLD_BANK" data-i18n="sourceTitle_WORLD_BANK">World Bank Ineligible Firms and Individuals</option>
 
-            <option value="UNGM" data-i18n="sourceTitle_UNGM">UNGM Ineligibility List</option>
+            <option value="UNGM" data-i18n="sourceTitle_UNGM" disabled>UNGM Ineligibility List</option>
 
           </select>
         </label>
@@ -2961,12 +2961,8 @@ footer {
 
         <div>
           <b data-i18n="sourceTitle_UNGM">UNGM Ineligibility List</b>
-          <span class="not_configured" data-status="NOT_CONFIGURED" data-source-key="UNGM" data-source-count="0" data-source-retrieved-at="2026-11-19T16:24:08.937521+00:00" data-source-sha256="">NOT_CONFIGURED</span>
-          <small>
-            <span data-record-count="0">0 records</span>
-             · <time data-retrieved-at="2026-11-19T16:24:08.937521+00:00">2026-11-19T16:24:08.937521+00:00</time>
-             · <span data-status-message="UNGM integration requires an authorized HTTPS endpoint and UNGM_API_TOKEN">UNGM integration requires an authorized HTTPS endpoint and UNGM_API_TOKEN</span>
-          </small>
+          <span class="manual" data-status="MANUAL" data-source-key="UNGM" data-source-count="0" data-source-retrieved-at="" data-source-sha256="">MANUAL</span>
+          <small data-i18n="sourceDescription_UNGM">Not searched by this application; check UNGM separately for full due diligence.</small>
         </div>
 
       </div>
@@ -3191,7 +3187,8 @@ window.OCHA_TRANSLATIONS = {
     sourceDescription_UK: "Current UK designations published by the Foreign, Commonwealth & Development Office.",
     sourceDescription_EU: "Persons, groups and organizations subject to EU financial sanctions.",
     sourceDescription_WORLD_BANK: "Debarred and cross-debarred firms and individuals from the World Bank list.",
-    sourceDescription_UNGM: "UNGM ineligibility records; integration requires an authorized endpoint and token.",
+    sourceDescription_UNGM: "Not searched by this application; check UNGM separately for full due diligence.",
+    statusManualCheck: "Manual check required",
     statusAvailable: "Available",
     statusNotConfiguredTranslated: "Not configured",
     statusErrorTranslated: "Error",
@@ -3404,7 +3401,8 @@ window.OCHA_TRANSLATIONS = {
     sourceDescription_UK: "Désignations en vigueur au Royaume-Uni publiées par le Foreign, Commonwealth & Development Office.",
     sourceDescription_EU: "Personnes, groupes et organisations soumis aux sanctions financières de l’UE.",
     sourceDescription_WORLD_BANK: "Entreprises et personnes exclues ou exclues par réciprocité de la liste de la Banque mondiale.",
-    sourceDescription_UNGM: "Données d’inéligibilité de l’UNGM ; l’intégration nécessite un point de terminaison autorisé et un jeton.",
+    sourceDescription_UNGM: "Non interrogée par cette application ; consultez l’UNGM séparément pour une diligence raisonnable complète.",
+    statusManualCheck: "Vérification manuelle requise",
     statusAvailable: "Disponible",
     statusNotConfiguredTranslated: "Non configuré",
     statusErrorTranslated: "Erreur",
@@ -3617,7 +3615,8 @@ window.OCHA_TRANSLATIONS = {
     sourceDescription_UK: "Designaciones vigentes del Reino Unido publicadas por el Foreign, Commonwealth & Development Office.",
     sourceDescription_EU: "Personas, grupos y organizaciones sujetos a sanciones financieras de la UE.",
     sourceDescription_WORLD_BANK: "Empresas y personas inhabilitadas o inhabilitadas recíprocamente en la lista del Banco Mundial.",
-    sourceDescription_UNGM: "Registros de inhabilitación de UNGM; la integración requiere un punto de conexión autorizado y un token.",
+    sourceDescription_UNGM: "Esta aplicación no consulta UNGM; verifíquelo por separado para una diligencia debida completa.",
+    statusManualCheck: "Se requiere verificación manual",
     statusAvailable: "Disponible",
     statusNotConfiguredTranslated: "No configurado",
     statusErrorTranslated: "Error",
@@ -3632,7 +3631,7 @@ window.OCHA_TRANSLATIONS = {
 </script>
 <script>
 (() => {
-  const records = JSON.parse(document.querySelector("#offline-records").textContent);
+  const records = JSON.parse(document.querySelector("#offline-records").textContent).filter(record => record.source !== "UNGM");
   const countrySearchAliases = JSON.parse(
     document.querySelector("#offline-country-aliases").textContent
   );
@@ -3685,6 +3684,7 @@ window.OCHA_TRANSLATIONS = {
     const keys = {
       OK: "statusAvailable",
       NOT_CONFIGURED: "statusNotConfiguredTranslated",
+      MANUAL: "statusManualCheck",
       ERROR: "statusErrorTranslated",
       NOT_LOADED: "statusNotLoadedTranslated"
     };
@@ -3730,9 +3730,11 @@ window.OCHA_TRANSLATIONS = {
           ? translate("ungmConfigurationMessage")
           : statusMessage;
     });
-    snapshotNotice.textContent = translate("offlineSnapshotNotice", {
+    if (snapshotNotice) {
+      snapshotNotice.textContent = translate("offlineSnapshotNotice", {
       date: snapshotNotice.dataset.generatedAt
     });
+    }
     if (currentSearchMessage) {
       showSearchMessage(
         currentSearchMessage.key,

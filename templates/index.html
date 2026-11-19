@@ -80,7 +80,7 @@
           <select id="s">
             <option value="" data-i18n="allLoadedSources">All loaded sources</option>
             {% for key, item in source_details.items() %}
-            <option value="{{ key }}" data-i18n="sourceTitle_{{ key }}">{{ item.title }}</option>
+            <option value="{{ key }}" data-i18n="sourceTitle_{{ key }}"{% if key == manual_source %} disabled{% endif %}>{{ item.title }}</option>
             {% endfor %}
           </select>
         </label>
@@ -154,11 +154,13 @@
         <div>
           <b data-i18n="sourceTitle_{{ key }}">{{ item['title'] }}</b>
           <span class="{% if x %}{{x['status']|lower}}{% else %}not-loaded{% endif %}" data-status="{{x['status'] if x else 'NOT_LOADED'}}" data-source-key="{{ key }}" data-source-count="{{x['count'] if x else 0}}" data-source-retrieved-at="{{x['retrieved_at'] if x else ''}}" data-source-sha256="{{x['sha256'] if x else ''}}">{{x['status'] if x else 'NOT_LOADED'}}</span>
-          <small>
+          {% if key == manual_source %}
+          <small data-i18n="sourceDescription_UNGM">{{ item['description'] }}</small>
+          {% else %}<small>
             <span data-record-count="{{x['count'] if x else 0}}">{{x['count'] if x else 0}} records</span>
             {% if x and x['retrieved_at'] %} · <time data-retrieved-at="{{x['retrieved_at']}}">{{x['retrieved_at']}}</time>{% else %} · <span data-i18n="notRefreshedYet">Not refreshed yet</span>{% endif %}
             {% if x and x['message'] %} · <span data-status-message="{{x['message']}}">{{x['message']}}</span>{% endif %}
-          </small>
+          </small>{% endif %}
         </div>
         {% endfor %}
       </div>
@@ -215,6 +217,7 @@
       const keys={
         OK:'statusAvailable',
         NOT_CONFIGURED:'statusNotConfiguredTranslated',
+        MANUAL:'statusManualCheck',
         ERROR:'statusErrorTranslated',
         NOT_LOADED:'statusNotLoadedTranslated'
       };
@@ -413,7 +416,7 @@
     const refreshAllButton=document.querySelector('#refresh-all-sources');
     if(refreshAllButton){
       refreshAllButton.addEventListener('click',async()=>{
-        const sources=Array.from(document.querySelectorAll('.status [data-source-key]'),element=>element.dataset.sourceKey);
+        const sources=Array.from(document.querySelectorAll('.status [data-source-key]:not([data-status="MANUAL"])'),element=>element.dataset.sourceKey);
         const failures=[];
         let count=0;
         refreshAllButton.disabled=true;

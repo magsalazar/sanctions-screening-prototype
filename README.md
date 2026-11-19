@@ -42,7 +42,7 @@ python export_offline_html.py
 
 This creates `OCHA_Sanctions_Search_Offline.html`, a self-contained English/French/Spanish search page with the records currently in the database, including opt-in fuzzy name matching, and a matching root `index.html` for GitHub Pages. These static files do not include the local Search Report workflow. Share the offline file through an approved internal location; colleagues should download it and open it in a browser. It does not need Python or a local server.
 
-The HTML is a fixed snapshot: it does not refresh its records, and it has no source-refresh controls. Generate and redistribute a new file after refreshing the database. The source-status panel shows each source's retrieval time. UNGM remains unavailable unless its authorized feed is configured. A result is only a possible match; users must verify it against the official source.
+The HTML is a fixed snapshot: it does not refresh its records, and it has no source-refresh controls. Generate and redistribute a new file after refreshing the database. The source-status panel shows each source's retrieval time. UNGM is not searched; check it separately for full due diligence. A result is only a possible match; users must verify it against the official source.
 
 ## GitHub Pages
 
@@ -82,17 +82,7 @@ Unregister-ScheduledTask -TaskName "OCHA Sanctions Daily Refresh"
 - **UK Sanctions List** — official CSV; records sharing a UKSL identifier are grouped with their name variants.
 - **EU Consolidated Financial Sanctions List** — the Commission's catalogued CSV 1.1 distribution; names, aliases, countries and programmes are grouped by entity.
 - **World Bank Ineligible Firms and Individuals** — the JSON endpoint used by the Bank's official list page; only debarred and cross-debarred entries are indexed. The API key is read from the Bank's public page at runtime and is not stored in this project. If the Bank changes its endpoint or page configuration, `WORLD_BANK_API_URL` and `WORLD_BANK_API_KEY` can be set in the process environment.
-- **UNGM Ineligibility List** — access-controlled adapter for an authorized HTTPS JSON, CSV or XML feed. UNGM does not expose a verified public feed to this prototype, so a connection is active only after an authorized endpoint and bearer token are supplied.
-
-Set UNGM integration details in the environment before launching the app or running ingestion. Do not put credentials in the repository or paste them into chat:
-
-```powershell
-$env:UNGM_API_URL = "https://<authorized-ungm-endpoint>"
-$env:UNGM_API_TOKEN = "<authorized-token>"
-python ingest.py
-```
-
-If no UNGM endpoint/token is configured, the source is shown as `NOT_CONFIGURED`; the rest of the site and sources continue to work. A feed with an unrecognized schema reports an error instead of being indexed as a successful refresh.
+- **UNGM Ineligibility List** — shown for awareness only. The application does not connect to, refresh or search it, even if old records or credentials exist. Search it separately for full due diligence.
 
 ## Data handling and limitations
 

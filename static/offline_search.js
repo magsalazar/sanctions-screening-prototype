@@ -1,5 +1,6 @@
 (() => {
-  const records = JSON.parse(document.querySelector("#offline-records").textContent);
+  const records = JSON.parse(document.querySelector("#offline-records").textContent)
+    .filter(record => record.source !== "UNGM");
   const countrySearchAliases = JSON.parse(
     document.querySelector("#offline-country-aliases").textContent
   );
@@ -52,6 +53,7 @@
     const keys = {
       OK: "statusAvailable",
       NOT_CONFIGURED: "statusNotConfiguredTranslated",
+      MANUAL: "statusManualCheck",
       ERROR: "statusErrorTranslated",
       NOT_LOADED: "statusNotLoadedTranslated"
     };
@@ -97,9 +99,11 @@
           ? translate("ungmConfigurationMessage")
           : statusMessage;
     });
-    snapshotNotice.textContent = translate("offlineSnapshotNotice", {
-      date: snapshotNotice.dataset.generatedAt
-    });
+    if (snapshotNotice) {
+      snapshotNotice.textContent = translate("offlineSnapshotNotice", {
+        date: snapshotNotice.dataset.generatedAt
+      });
+    }
     if (currentSearchMessage) {
       showSearchMessage(
         currentSearchMessage.key,

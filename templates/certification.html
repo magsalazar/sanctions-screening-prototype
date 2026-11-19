@@ -105,9 +105,16 @@
         </div>
         <form id="certification-entity-form" class="certification-form">
           <div class="certification-fields">
-            <label><span data-i18n="entityName">Entity name</span>
-              <input id="cert-entity-name" maxlength="240" required>
-            </label>
+            <div class="certification-name-field">
+              <label><span data-i18n="entityName">Entity name</span>
+                <input id="cert-entity-name" maxlength="240" required>
+              </label>
+              <label class="fuzzy-matching-control certification-fuzzy-control">
+                <input id="cert-fuzzy-matching" type="checkbox" aria-describedby="cert-fuzzy-hint">
+                <span data-i18n="fuzzyMatching">Include fuzzy name matches (experimental)</span>
+              </label>
+              <p id="cert-fuzzy-hint" class="fuzzy-matching-hint" data-i18n="fuzzyMatchingHint">Fuzzy matching can return unrelated names. Similarity scores are heuristic, not confidence or proof; verify every possible match.</p>
+            </div>
             <label><span data-i18n="entityCategory">Entity category</span>
               <select id="cert-entity-category" required>
                 <option value="subpartner" data-i18n="categorySubpartner">Sub-implementing partner</option>
@@ -130,11 +137,6 @@
             <button id="cancel-certification-entity" class="reset-button" type="button" data-i18n="cancelEdit" hidden>Cancel edit</button>
           </div>
         </form>
-        <label class="fuzzy-matching-control certification-fuzzy-control">
-          <input id="cert-fuzzy-matching" type="checkbox">
-          <span data-i18n="fuzzyMatching">Include fuzzy name matches (experimental)</span>
-        </label>
-        <p class="fuzzy-matching-hint" data-i18n="fuzzyMatchingHint">Fuzzy matching can return unrelated names. Similarity scores are heuristic, not confidence or proof; verify every possible match.</p>
         <div id="certification-entity-list" class="certification-entity-list" aria-live="polite"></div>
         <div class="certification-actions">
           <button id="screen-certification-entities" type="button" data-i18n="screenAllEntities">Screen all registered entities</button>

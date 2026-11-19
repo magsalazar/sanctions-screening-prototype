@@ -10,6 +10,13 @@ import ingest
 
 
 class IngestParserTests(unittest.TestCase):
+    def test_ungm_refresh_never_contacts_a_configured_endpoint(self):
+        with patch.dict(os.environ, {"UNGM_API_URL": "https://ungm.org/feed", "UNGM_API_TOKEN": "test"}):
+            with patch.object(ingest, "_request") as mocked_request:
+                with self.assertRaises(ingest.SourceNotConfigured):
+                    ingest.refresh("UNGM")
+                mocked_request.assert_not_called()
+
     def test_unsc_parses_individual_names_aliases_and_country(self):
         data = b"""<CONSOLIDATED_LIST><INDIVIDUALS_LIST><INDIVIDUAL>
         <REFERENCE_NUMBER>QDi.1</REFERENCE_NUMBER><FIRST_NAME>Test Person</FIRST_NAME>

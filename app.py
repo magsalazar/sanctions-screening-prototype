@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request
 from rapidfuzz import fuzz, process, utils
 
-from config import SOURCE_DETAILS, SOURCE_PAGES, SOURCES
+from config import MANUAL_SOURCE, SOURCE_DETAILS, SOURCE_PAGES, SOURCES
 from ingest import DB, SourceNotConfigured, init, refresh
 
 
@@ -292,17 +292,22 @@ def ensure_seed_data():
     with closing(sqlite3.connect(DB)) as connection:
         loaded_sources = {
             row[0]
-            for row in connection.execute("SELECT DISTINCT source FROM records").fetchall()
+            for row in connection.execute(
+                "SELECT DISTINCT source FROM records WHERE COALESCE(source, '') != ?",
+                (MANUAL_SOURCE,),
+            ).fetchall()
         }
     for source in SOURCES:
-        if source in loaded_sources:
+        if source == MANUAL_SOURCE or source in loaded_sources:
             continue
         try:
             refresh(source)
         except Exception as exc:
             app.logger.warning("Initial refresh for %s failed: %s", source, exc)
     with closing(sqlite3.connect(DB)) as connection:
-        return connection.execute("SELECT COUNT(*) FROM records").fetchone()[0]
+        return connection.execute(
+            "SELECT COUNT(*) FROM records WHERE COALESCE(source, '') != ?", (MANUAL_SOURCE,)
+        ).fetchone()[0]
 
 def conn():
     connection = sqlite3.connect(DB)
@@ -312,15 +317,22 @@ def conn():
 
 def _page_context():
     connection = conn()
-    logs = connection.execute("SELECT * FROM refresh_log ORDER BY source").fetchall()
+    logs = connection.execute(
+        "SELECT * FROM refresh_log WHERE source != ? ORDER BY source", (MANUAL_SOURCE,)
+    ).fetchall()
     stats = connection.execute(
-        "SELECT COUNT(*) AS records, COUNT(DISTINCT source) AS sources FROM records"
+        "SELECT COUNT(*) AS records, COUNT(DISTINCT source) AS sources FROM records "
+        "WHERE COALESCE(source, '') != ?", (MANUAL_SOURCE,)
     ).fetchone()
     country_rows = connection.execute(
-        "SELECT DISTINCT country FROM records WHERE country IS NOT NULL AND country != ''"
+        "SELECT DISTINCT country FROM records WHERE country IS NOT NULL AND country != '' "
+        "AND COALESCE(source, '') != ?", (MANUAL_SOURCE,)
     ).fetchall()
     connection.close()
     logs_by_source = {row["source"]: row for row in logs}
+    logs_by_source[MANUAL_SOURCE] = {
+        "status": "MANUAL", "count": 0, "message": "", "retrieved_at": "", "sha256": ""
+    }
     countries = {}
     for row in country_rows:
         for country in row["country"].split("|"):
@@ -343,6 +355,7 @@ def _page_context():
         "country_aliases": COUNTRY_SUGGESTION_ALIASES,
         "country_autocomplete_aliases": COUNTRY_AUTOCOMPLETE_ALIASES,
         "source_refresh_enabled": app.config["SOURCE_REFRESH_ENABLED"],
+        "manual_source": MANUAL_SOURCE,
     }
 
 
@@ -361,6 +374,8 @@ def search():
     query = " ".join(request.args.get("name", "").split())
     country = request.args.get("country", "").strip()
     source = request.args.get("source", "").strip()
+    if source == MANUAL_SOURCE:
+        return jsonify(error="UNGM must be checked separately"), 403
     fuzzy_value = request.args.get("fuzzy_match", "false").strip().casefold()
     if fuzzy_value not in {"true", "false"}:
         return jsonify(error="Fuzzy matching must be true or false"), 400
@@ -382,8 +397,8 @@ def search():
         return jsonify(error="Enter at least 2 characters for a name search"), 400
     if not query and not country:
         return jsonify(error="Enter a name or country to search"), 400
-    conditions = []
-    args = []
+    conditions = ["COALESCE(source, '') != ?"]
+    args = [MANUAL_SOURCE]
     if query and not fuzzy_match:
         conditions.append("(name LIKE ? OR aliases LIKE ?)")
         args.extend((f"%{query}%", f"%{query}%"))
@@ -520,6 +535,8 @@ def do_refresh(source):
         return jsonify(error="Source refresh is disabled"), 403
     if source not in SOURCES:
         return jsonify(error="Unknown source"), 404
+    if source == MANUAL_SOURCE:
+        return jsonify(error="UNGM must be checked separately"), 403
     try:
         return jsonify(source=source, count=refresh(source), status="OK")
     except SourceNotConfigured as exc:

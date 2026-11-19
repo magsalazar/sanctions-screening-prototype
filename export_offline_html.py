@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import sqlite3
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -42,8 +43,8 @@ def build_html(page, records, country_aliases, generated_at):
     )
     page = page.replace('data-i18n="liveData"', 'data-i18n="offlineSnapshot"', 1)
     page = page.replace(
-        '  <main class="container main-shell">',
-        '  <main class="container main-shell">\n'
+        '  <main id="main-content" class="container main-shell" tabindex="-1">',
+        '  <main id="main-content" class="container main-shell" tabindex="-1">\n'
         '    <aside class="notice-box" id="snapshot-notice" '
         f'data-generated-at="{generated_at}"></aside>',
         1,
@@ -116,7 +117,7 @@ def export(output_path):
     if not database_path.is_file():
         raise FileNotFoundError(f"Sanctions database not found: {database_path}")
 
-    with sqlite3.connect(f"file:{database_path.as_posix()}?mode=ro", uri=True) as connection:
+    with closing(sqlite3.connect(f"file:{database_path.as_posix()}?mode=ro", uri=True)) as connection:
         connection.row_factory = sqlite3.Row
         records = [
             dict(row)
@@ -125,8 +126,10 @@ def export(output_path):
                 SELECT id, source, source_ref, name, aliases, country, entity_type,
                        programmes, source_url, retrieved_at
                 FROM records
+                WHERE COALESCE(source, '') != ?
                 ORDER BY name COLLATE NOCASE, source, source_ref, id
-                """
+                """,
+                (sanctions_app.MANUAL_SOURCE,),
             )
         ]
     if not records:

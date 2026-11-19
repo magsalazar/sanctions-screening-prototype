@@ -1066,6 +1066,16 @@ footer {
   align-content: start;
 }
 
+.certification-name-field > label:first-child {
+  display: grid;
+  gap: 7px;
+}
+
+.certification-fields .certification-fuzzy-control input {
+  width: 18px;
+  min-height: 18px;
+}
+
 .certification-fields input,
 .certification-fields select,
 .certification-fields textarea {

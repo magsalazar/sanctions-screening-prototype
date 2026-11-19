@@ -1,6 +1,3 @@
-import os
-
-
 SOURCES = {
     "UNSC": "https://scsanctions.un.org/resources/xml/en/consolidated.xml",
     "OFAC_SDN": "https://www.treasury.gov/ofac/downloads/sdn.csv",
@@ -8,8 +5,10 @@ SOURCES = {
     "UK": "https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv",
     "EU": "https://webgate.ec.europa.eu/fsd/fsf/public/files/csvFullSanctionsList_1_1/content?token=dG9rZW4tMjAxNw",
     "WORLD_BANK": "https://www.worldbank.org/en/projects-operations/procurement/debarred-firms",
-    "UNGM": os.environ.get("UNGM_API_URL", "").strip(),
+    "UNGM": "",
 }
+
+MANUAL_SOURCE = "UNGM"
 
 SOURCE_PAGES = {
     "UNSC": "https://main.un.org/securitycouncil/en/content/un-sc-consolidated-list",
@@ -54,7 +53,7 @@ SOURCE_DETAILS = {
     },
     "UNGM": {
         "title": "UNGM Ineligibility List",
-        "description": "UNGM ineligibility records; integration requires an authorized endpoint and token.",
+        "description": "UNGM is not searched by this application; check it separately for full due diligence.",
         "access": "Restricted",
     },
 }

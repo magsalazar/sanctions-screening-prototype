@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from config import SOURCE_PAGES, SOURCES
+from config import MANUAL_SOURCE, SOURCE_PAGES, SOURCES
 
 DB = os.environ.get("SANCTIONS_DB", "sanctions.db")
 UA = "OCHA-AIT-Sanctions-Prototype/0.3 (technical prototype)"
@@ -521,22 +521,6 @@ def _fetch_ofac(source):
     return records, downloaded
 
 
-def _fetch_ungm():
-    endpoint = os.environ.get("UNGM_API_URL", "").strip()
-    token = os.environ.get("UNGM_API_TOKEN", "").strip()
-    if not endpoint or not token:
-        raise SourceNotConfigured(
-            "UNGM integration requires an authorized HTTPS endpoint and UNGM_API_TOKEN"
-        )
-    parsed = urlparse(endpoint)
-    if parsed.scheme != "https" or not parsed.hostname or not (
-        parsed.hostname == "ungm.org" or parsed.hostname.endswith(".ungm.org")
-    ):
-        raise ValueError("UNGM endpoint must use HTTPS on an ungm.org host")
-    data = _request("UNGM", endpoint, headers={"Authorization": f"Bearer {token}"})
-    return ungm(data), [("ungm", data)]
-
-
 def _fetch_source(source):
     if source in OFAC_FILES:
         return _fetch_ofac(source)
@@ -552,8 +536,8 @@ def _fetch_source(source):
     if source == "WORLD_BANK":
         data = _world_bank_payload()
         return world_bank(data), [("world_bank", data)]
-    if source == "UNGM":
-        return _fetch_ungm()
+    if source == MANUAL_SOURCE:
+        raise SourceNotConfigured("UNGM must be checked separately")
     raise KeyError(f"Unknown source: {source}")
 
 
@@ -577,6 +561,8 @@ def _write_refresh_log(source, status, count, message, retrieved_at, sha256=""):
 def refresh(source):
     if source not in SOURCES:
         raise KeyError(f"Unknown source: {source}")
+    if source == MANUAL_SOURCE:
+        raise SourceNotConfigured("UNGM must be checked separately")
     now = datetime.now(timezone.utc).isoformat()
     try:
         records, downloaded = _fetch_source(source)
@@ -626,6 +612,8 @@ if __name__ == "__main__":
     init()
     failed = False
     for source in SOURCES:
+        if source == MANUAL_SOURCE:
+            continue
         try:
             print(source, refresh(source))
         except SourceNotConfigured as exc:

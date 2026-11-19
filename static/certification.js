@@ -119,7 +119,9 @@
 
   function clearEntityForm() {
     editingEntityId = null;
+    const fuzzyMatching = fuzzyMatchingInput.checked;
     entityForm.reset();
+    fuzzyMatchingInput.checked = fuzzyMatching;
     saveEntityButton.textContent = translate("addEntity");
     saveEntityButton.dataset.i18n = "addEntity";
     cancelEditButton.hidden = true;
@@ -175,6 +177,7 @@
   function summarizeScreening() {
     const entityRuns = exercise.screening.entities;
     const sourcesSearched = sources.filter(source =>
+      source.key !== "UNGM" &&
       !recordSourceUnavailable(source) &&
       entityRuns.length > 0 &&
       entityRuns.every(entity => entity.sources[source.key]?.status === "searched")
@@ -200,6 +203,7 @@
   }
 
   function sourceStatusLabel(source, sourceRun) {
+    if (source.key === "UNGM") return translate("databaseManualCheck");
     if (recordSourceUnavailable(source)) {
       return source.status === "NOT_CONFIGURED"
         ? translate("databaseNotConfigured")
@@ -243,7 +247,7 @@
           : translate("statusNoPotentialMatch");
       const statusClass = entity.findings.length ? "review" : entity.incomplete ? "incomplete" : "no-match";
       const coverageGaps = sources.filter(source =>
-        entity.sources[source.key]?.status !== "searched"
+        source.key !== "UNGM" && entity.sources[source.key]?.status !== "searched"
       ).map(sourceLabel).join(", ");
       const queryList = entity.queryLog.map(query => {
         const queryName = translations[language][`sourceShort_${query.source}`] || query.source;
@@ -269,7 +273,7 @@
         : "";
       return `<details class="certification-entity-result"><summary><span>${escapeHtml(entity.entity.name)}</span><span class="certification-result-status ${statusClass}">${escapeHtml(status)}</span></summary><p>${escapeHtml(categoryLabel(entity.entity.category))}${entity.entity.country ? ` · ${escapeHtml(entity.entity.country)}` : ""} · ${escapeHtml(translate("screeningTimestamp", { date: formatDate(entity.completedAt) }))}</p><p><strong>${escapeHtml(translate("searchedNameQueries"))}:</strong> ${escapeHtml(entity.queries.join(" · "))}</p><p><strong>${escapeHtml(translate("queryDetails"))}:</strong></p><ul class="certification-query-list">${queryList}</ul>${incompleteNotice}${findingContent}</details>`;
     }).join("");
-    resultsPanel.innerHTML = `<div class="certification-summary">${summaryItems.map(([key, value]) => `<div><span>${escapeHtml(translate(key))}</span><strong>${escapeHtml(formatNumber(value))}</strong></div>`).join("")}</div><h4>${escapeHtml(translate("sourceRegister"))}</h4><div class="certification-table-wrap"><table class="certification-table"><thead><tr><th>${escapeHtml(translate("sourceName"))}</th><th>${escapeHtml(translate("sourceRecords"))}</th><th>${escapeHtml(translate("sourceRetrieved"))}</th><th>${escapeHtml(translate("sourceSnapshot"))}</th><th>${escapeHtml(translate("sourceSearchStatus"))}</th></tr></thead><tbody>${sourceRows}</tbody></table></div><h4>${escapeHtml(translate("entityResults"))}</h4><div class="certification-result-list">${entityCards}</div>`;
+    resultsPanel.innerHTML = `<div class="certification-summary">${summaryItems.map(([key, value]) => `<div><span>${escapeHtml(translate(key))}</span><strong>${escapeHtml(formatNumber(value))}</strong></div>`).join("")}</div><p class="certification-result-notice incomplete">${escapeHtml(translate("ungmManualNotice"))}</p><h4>${escapeHtml(translate("sourceRegister"))}</h4><div class="certification-table-wrap"><table class="certification-table"><thead><tr><th>${escapeHtml(translate("sourceName"))}</th><th>${escapeHtml(translate("sourceRecords"))}</th><th>${escapeHtml(translate("sourceRetrieved"))}</th><th>${escapeHtml(translate("sourceSnapshot"))}</th><th>${escapeHtml(translate("sourceSearchStatus"))}</th></tr></thead><tbody>${sourceRows}</tbody></table></div><h4>${escapeHtml(translate("entityResults"))}</h4><div class="certification-result-list">${entityCards}</div>`;
     resultsPanel.hidden = false;
   }
 
@@ -325,6 +329,7 @@
       <h4>${escapeHtml(translate("previewScreening"))}</h4>
       <p>${escapeHtml(translate("totalEntities"))}: ${escapeHtml(formatNumber(summary.totalEntities))} · ${escapeHtml(translate("successfulSources"))}: ${escapeHtml(formatNumber(summary.sourcesSearched))} · ${escapeHtml(translate("potentialFindings"))}: ${escapeHtml(formatNumber(summary.findings))} · ${escapeHtml(translate("incompleteSearches"))}: ${escapeHtml(formatNumber(summary.incompleteEntities))}</p>
       <p>${escapeHtml(translate("fuzzyMatching"))}: ${escapeHtml(translate(exercise.screening.fuzzyMatching ? "fuzzyEnabled" : "fuzzyDisabled"))}</p>
+      <p class="certification-result-notice incomplete">${escapeHtml(translate("ungmManualNotice"))}</p>
       <h4>${escapeHtml(translate("sourceRegister"))}</h4>
       <div class="certification-table-wrap"><table class="certification-table"><thead><tr><th>${escapeHtml(translate("sourceName"))}</th><th>${escapeHtml(translate("sourceRecords"))}</th><th>${escapeHtml(translate("sourceRetrieved"))}</th><th>${escapeHtml(translate("sourceSnapshot"))}</th><th>${escapeHtml(translate("sourceSearchStatus"))}</th></tr></thead><tbody>${sourceRows}</tbody></table></div>
       <h4>${escapeHtml(translate("previewThirdParties"))}</h4>
@@ -588,6 +593,7 @@
         };
         const findingKeys = new Set();
         for (const source of sources) {
+          if (source.key === "UNGM") continue;
           if (recordSourceUnavailable(source)) {
             entityRun.sources[source.key] = { status: "unavailable", queries: 0 };
             entityRun.unavailableSources.push(source.key);

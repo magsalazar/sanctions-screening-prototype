@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
+from pathlib import Path
 from unittest.mock import patch
 
 import app as sanctions_app
@@ -298,6 +299,8 @@ class CountrySearchTests(unittest.TestCase):
         self.assertIn('id="reset-certification-request"', certification_page)
         self.assertIn('id="reset-certification-entity"', certification_page)
         self.assertIn('id="new-certification-exercise"', certification_page)
+        self.assertLess(certification_page.index('id="cert-entity-name"'), certification_page.index('id="cert-fuzzy-matching"'))
+        self.assertLess(certification_page.index('id="cert-fuzzy-matching"'), certification_page.index('id="cert-entity-category"'))
         self.assertIn("Start a new Search Report", certification_page)
         self.assertNotIn("CBPF", certification_page)
         self.assertNotIn("cert-project-", certification_page)
@@ -308,6 +311,7 @@ class CountrySearchTests(unittest.TestCase):
         self.assertNotIn('href="/certification"', static_page)
         self.assertNotIn('id="refresh-all-sources"', static_page)
         self.assertNotIn("fetch(", static_page)
+        self.assertIn('id="snapshot-notice"', static_page)
 
     def test_source_refresh_can_be_disabled_for_public_demonstrations(self):
         with patch.dict(sanctions_app.app.config, {"SOURCE_REFRESH_ENABLED": False}):
@@ -327,6 +331,40 @@ class CountrySearchTests(unittest.TestCase):
             page = self.client.get("/").get_data(as_text=True)
             self.assertIn('class="refresh-button"', page)
             self.assertEqual(page.count('id="refresh-all-sources"'), 1)
+
+    def test_ungm_is_visible_but_never_refreshed_or_searched(self):
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute(
+                "INSERT INTO records(source,name,country) VALUES(?,?,?)",
+                ("UNGM", "Legacy Unique Supplier", "Legacyland"),
+            )
+        for fuzzy in ("false", "true"):
+            response = self.client.get(
+                "/api/search",
+                query_string={"name": "Legacy Unique Supplier", "fuzzy_match": fuzzy},
+            )
+            self.assertEqual(response.json["count"], 0)
+        self.assertEqual(self.client.get("/api/search?source=UNGM").status_code, 403)
+        with patch.dict(sanctions_app.app.config, {"SOURCE_REFRESH_ENABLED": True}):
+            with patch.object(sanctions_app, "refresh") as mocked_refresh:
+                self.assertEqual(self.client.post("/api/refresh/UNGM").status_code, 403)
+                mocked_refresh.assert_not_called()
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertRegex(page, r'<option value="UNGM"[^>]*disabled')
+        self.assertRegex(page, r'data-status="MANUAL" data-source-key="UNGM"')
+        self.assertNotIn("Legacyland", page)
+        output = Path(self.temp_dir.name) / "snapshot.html"
+        export_offline_html.export(output)
+        self.assertNotIn("Legacy Unique Supplier", output.read_text(encoding="utf-8"))
+
+    def test_seed_skips_ungm_even_when_it_is_the_only_existing_source(self):
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute("DELETE FROM records")
+            connection.execute("INSERT INTO records(source,name) VALUES('UNGM','Legacy')")
+        with patch.object(sanctions_app, "SOURCES", {"UNGM": "", "EU": ""}):
+            with patch.object(sanctions_app, "refresh", return_value=0) as mocked_refresh:
+                self.assertEqual(sanctions_app.ensure_seed_data(), 0)
+                mocked_refresh.assert_called_once_with("EU")
 
     def test_seed_reports_when_no_sources_load(self):
         with closing(sqlite3.connect(self.database)) as connection:
