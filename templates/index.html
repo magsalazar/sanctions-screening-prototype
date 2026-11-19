@@ -421,8 +421,14 @@
           showRefreshMessage('refreshing',{sourceKey:source});
           try {
             const response=await fetch(`/api/refresh/${encodeURIComponent(source)}`,{method:'POST'});
-            const result=await response.json();
-            if(!response.ok) throw new Error(result.error||`${translate('refreshFailed')} (${response.status})`);
+            if(!response.ok){
+              let message=`${translate('refreshFailed')} (HTTP ${response.status})`;
+              if(response.headers.get('content-type')?.includes('application/json')){
+                const result=await response.json();
+                message=result.error||message;
+              }
+              throw new Error(message);
+            }
             count++;
           } catch(error) {
             failures.push({sourceKey:source,error:error.message});

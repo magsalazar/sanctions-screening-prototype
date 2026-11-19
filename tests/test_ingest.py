@@ -94,6 +94,21 @@ class IngestParserTests(unittest.TestCase):
         self.assertEqual(result[0]["aliases"], "Alias Person")
         self.assertEqual(result[0]["country"], "Exampleland")
 
+    def test_uk_csv_handles_bom_blank_rows_and_quoted_newlines(self):
+        data = (
+            b"\xef\xbb\xbfReport Date: 01-Jan-2026\r\n"
+            b"Unique ID,Name 6,Address Country\r\n"
+            b"\r\n"
+            b'UK123,"Primary\r\nPerson",Exampleland\r\n'
+            b"UK123,Alias Person,Exampleland\r\n"
+        )
+
+        result = ingest.uk(data)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["name"], "Primary Person")
+        self.assertEqual(result[0]["aliases"], "Alias Person")
+
     def test_world_bank_includes_debarred_and_cross_debarred_only(self):
         result = ingest.world_bank(
             b"""{"response":{"ZPROCSUPP":[

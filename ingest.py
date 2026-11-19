@@ -239,20 +239,24 @@ def ofac_bundle(primary_data, alias_data, address_data, source):
 
 
 def uk(data):
-    rows = _csv_rows(data)
-    header_index = next(
+    rows = csv.reader(
+        io.TextIOWrapper(io.BytesIO(data), encoding="utf-8-sig", errors="replace", newline="")
+    )
+    header = next(
         (
-            index
-            for index, row in enumerate(rows)
+            row
+            for row in rows
             if "unique id" in [norm(cell).casefold() for cell in row]
         ),
         None,
     )
-    if header_index is None:
+    if header is None:
         return []
-    headers = [norm(cell) for cell in rows[header_index]]
+    headers = [norm(cell) for cell in header]
     grouped = OrderedDict()
-    for row in rows[header_index + 1 :]:
+    for row in rows:
+        if not any(norm(cell) for cell in row):
+            continue
         values = row + [""] * max(0, len(headers) - len(row))
         record = {headers[index]: values[index] for index in range(len(headers))}
         lowered = {key.casefold(): value for key, value in record.items()}
